@@ -1,6 +1,6 @@
 import os
 import uuid
-from flask import Blueprint, request, redirect, url_for, flash, render_template, send_from_directory
+from flask import Blueprint, request, redirect, url_for, flash, render_template, send_from_directory, current_app
 from werkzeug.utils import secure_filename
 from PIL import Image as PILImage
 from models import db, Project, Image
@@ -17,7 +17,7 @@ def allowed_file(filename):
 @bp.route("/<int:project_id>/image/<path:filepath>")
 def serve_image(project_id, filepath):
     Project.query.get_or_404(project_id)
-    base = request.app.config["PROJECTS_FOLDER"]
+    base = current_app.config["PROJECTS_FOLDER"]
     return send_from_directory(base, filepath)
 
 @bp.route("/<int:project_id>/dataset")
@@ -29,7 +29,7 @@ def dataset(project_id):
 @bp.route("/<int:project_id>/dataset/upload", methods=["POST"])
 def upload_files(project_id):
     project = Project.query.get_or_404(project_id)
-    project_dir = os.path.join(request.app.config["PROJECTS_FOLDER"], str(project_id), "images")
+    project_dir = os.path.join(current_app.config["PROJECTS_FOLDER"], str(project_id), "images")
     os.makedirs(project_dir, exist_ok=True)
     
     if "files" not in request.files and "file" not in request.files:
@@ -55,7 +55,7 @@ def upload_files(project_id):
             image = Image(
                 project_id=project_id,
                 filename=file.filename,
-                filepath=os.path.relpath(filepath, request.app.config["PROJECTS_FOLDER"]),
+                filepath=os.path.relpath(filepath, current_app.config["PROJECTS_FOLDER"]),
                 width=w,
                 height=h
             )
@@ -70,7 +70,7 @@ def upload_files(project_id):
 @bp.route("/<int:project_id>/dataset/<int:image_id>/delete", methods=["POST"])
 def delete_image(project_id, image_id):
     img = Image.query.filter_by(id=image_id, project_id=project_id).first_or_404()
-    full_path = os.path.join(request.app.config["PROJECTS_FOLDER"], img.filepath)
+    full_path = os.path.join(current_app.config["PROJECTS_FOLDER"], img.filepath)
     if os.path.exists(full_path):
         os.remove(full_path)
     db.session.delete(img)

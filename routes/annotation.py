@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Blueprint, request, render_template, jsonify
+from flask import Blueprint, request, render_template, jsonify, current_app
 from models import db, Project, Image, Annotation
 
 bp = Blueprint("annotation", __name__)
@@ -9,7 +9,7 @@ bp = Blueprint("annotation", __name__)
 def annotate(project_id, image_id):
     project = Project.query.get_or_404(project_id)
     image = Image.query.filter_by(id=image_id, project_id=project_id).first_or_404()
-    full_path = os.path.join(request.app.config["PROJECTS_FOLDER"], image.filepath)
+    full_path = os.path.join(current_app.config["PROJECTS_FOLDER"], image.filepath)
     if not os.path.exists(full_path):
         return "File not found", 404
     return render_template("annotate.html", project=project, image=image)

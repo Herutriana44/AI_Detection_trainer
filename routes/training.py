@@ -1,7 +1,7 @@
 import os
 import threading
 from pathlib import Path
-from flask import Blueprint, request, render_template, jsonify, send_file
+from flask import Blueprint, request, render_template, jsonify, send_file, current_app
 from models import db, Project, Image, Annotation, TrainedModel
 from utils.logger import get_logger
 
@@ -168,8 +168,9 @@ def start_training(project_id):
     db.session.add(model_record)
     db.session.commit()
     
+    app_instance = current_app._get_current_object()
     def run():
-        run_training(request.app, project_id, model_record.id)
+        run_training(app_instance, project_id, model_record.id)
     
     thread = threading.Thread(target=run)
     thread.start()

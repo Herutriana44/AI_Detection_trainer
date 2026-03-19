@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, request, redirect, url_for, flash, render_template
+from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app
 from models import db, Project
 from utils.logger import get_logger
 
@@ -17,7 +17,7 @@ def create():
         project = Project(name=name, description=description)
         db.session.add(project)
         db.session.commit()
-        os.makedirs(os.path.join(request.app.config["PROJECTS_FOLDER"], str(project.id)), exist_ok=True)
+        os.makedirs(os.path.join(current_app.config["PROJECTS_FOLDER"], str(project.id)), exist_ok=True)
         log.info("Project dibuat | id=%s name=%s", project.id, project.name)
         flash("Project berhasil dibuat.", "success")
         return redirect(url_for("dashboard.index"))
@@ -42,7 +42,7 @@ def edit(project_id):
 @bp.route("/<int:project_id>/delete", methods=["POST"])
 def delete(project_id):
     project = Project.query.get_or_404(project_id)
-    project_dir = os.path.join(request.app.config["PROJECTS_FOLDER"], str(project.id))
+    project_dir = os.path.join(current_app.config["PROJECTS_FOLDER"], str(project.id))
     if os.path.exists(project_dir):
         import shutil
         shutil.rmtree(project_dir)
