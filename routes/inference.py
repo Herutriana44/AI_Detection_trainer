@@ -5,7 +5,9 @@ import tempfile
 from pathlib import Path
 from flask import Blueprint, request, render_template, jsonify, send_file
 from models import Project, TrainedModel
+from utils.logger import get_logger
 
+log = get_logger("inference")
 bp = Blueprint("inference", __name__)
 
 @bp.route("/<int:project_id>/inference")
@@ -61,6 +63,7 @@ def run_detection(model_path, source, is_video=False):
     from ultralytics import YOLO
     import cv2
     
+    log.info("Inference dimulai | model=%s source=%s is_video=%s", model_path, str(source)[:80], is_video)
     model = YOLO(model_path)
     results = list(model(source, verbose=False))
     
@@ -78,4 +81,5 @@ def run_detection(model_path, source, is_video=False):
         b64 = base64.b64encode(buf).decode("utf-8")
         output_images.append(b64)
     
+    log.info("Inference selesai | frames=%d", len(output_images))
     return {"images": output_images}

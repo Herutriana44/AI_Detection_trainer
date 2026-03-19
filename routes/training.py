@@ -3,7 +3,9 @@ import threading
 from pathlib import Path
 from flask import Blueprint, request, render_template, jsonify, send_file
 from models import db, Project, Image, Annotation, TrainedModel
+from utils.logger import get_logger
 
+log = get_logger("training")
 bp = Blueprint("training", __name__)
 
 # Store training jobs
@@ -30,14 +32,17 @@ def get_classes_from_project(project):
 
 def run_training(app, project_id, model_id):
     job_id = f"{project_id}_{model_id}"
+    log.info("Training dimulai | project_id=%s model_id=%s", project_id, model_id)
     with app.app_context():
         model_record = TrainedModel.query.get(model_id)
         if not model_record or model_record.project_id != project_id:
+            log.warning("Model record tidak ditemukan atau tidak cocok | project_id=%s model_id=%s", project_id, model_id)
             return
         
         project = Project.query.get(project_id)
         annotated_images = [img for img in project.images if img.annotated]
         if not annotated_images:
+            log.warning("Tidak ada gambar teranotasi untuk project_id=%s", project_id)
             return
         
         classes = get_classes_from_project(project)
@@ -76,6 +81,7 @@ def run_training(app, project_id, model_id):
         
         copy_and_create_labels(train_imgs, train_images, train_labels)
         copy_and_create_labels(val_imgs, val_images, val_labels)
+        log.info("Dataset siap | train=%d val=%d classes=%s", len(train_imgs), len(val_imgs), class_names)
         
         data_yaml = f"""
 path: {dataset_dir.absolute()}
@@ -98,6 +104,7 @@ names:
             from ultralytics import YOLO
             
             model = YOLO(model_record.base_model)
+            log.info("YOLO model loaded | base=%s epochs=%d", model_record.base_model, model_record.epochs or 50)
             
             results = model.train(
                 data=str(dataset_dir / "data.yaml"),
@@ -116,9 +123,13 @@ names:
                 dest = model_dir / f"best_{model_id}.pt"
                 shutil.copy(best_path, dest)
                 model_record.model_path = str(dest)
+                log.info("Training selesai | model disimpan ke %s", dest)
+            else:
+                log.warning("File best.pt tidak ditemukan di %s", results.save_dir)
             
             model_record.status = "completed"
         except Exception as e:
+            log.exception("Training gagal | project_id=%s model_id=%s: %s", project_id, model_id, e)
             model_record.status = "failed"
             model_record.model_path = str(e)
         finally:
@@ -163,6 +174,7 @@ def start_training(project_id):
     thread = threading.Thread(target=run)
     thread.start()
     training_jobs[f"{project_id}_{model_record.id}"] = thread
+    log.info("Training job dijalankan | project_id=%s model_id=%s base=%s epochs=%d", project_id, model_record.id, base_model, epochs)
     
     return jsonify({"model_id": model_record.id, "success": True})
 

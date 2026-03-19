@@ -4,7 +4,9 @@ from flask import Blueprint, request, redirect, url_for, flash, render_template,
 from werkzeug.utils import secure_filename
 from PIL import Image as PILImage
 from models import db, Project, Image
+from utils.logger import get_logger
 
+log = get_logger("upload")
 bp = Blueprint("upload", __name__)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "webp"}
@@ -61,6 +63,7 @@ def upload_files(project_id):
             count += 1
     
     db.session.commit()
+    log.info("Upload berhasil | project_id=%s count=%d", project_id, count)
     flash(f"{count} gambar berhasil diupload.", "success")
     return redirect(url_for("upload.dataset", project_id=project_id))
 
@@ -72,5 +75,6 @@ def delete_image(project_id, image_id):
         os.remove(full_path)
     db.session.delete(img)
     db.session.commit()
+    log.info("Gambar dihapus | project_id=%s image_id=%s", project_id, image_id)
     flash("Gambar berhasil dihapus.", "success")
     return redirect(url_for("upload.dataset", project_id=project_id))
