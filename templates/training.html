@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Training - {{ project.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">Training Model</h2>
+        <p class="text-muted mb-0">{{ annotated_count }} gambar teranotasi</p>
+    </div>
+    <a href="{{ url_for('upload.dataset', project_id=project.id) }}" class="btn btn-outline-secondary">Dataset</a>
+</div>
+{% if annotated_count == 0 %}
+<div class="alert alert-warning">Belum ada dataset yang teranotasi. Silakan anotasi gambar terlebih dahulu di halaman Dataset.</div>
+{% else %}
+<div class="row">
+    <div class="col-lg-5">
+        <div class="card mb-4">
+            <div class="card-header">Mulai Training Baru</div>
+            <div class="card-body">
+                <form id="trainForm">
+                    <div class="mb-3">
+                        <label class="form-label">Model YOLO</label>
+                        <select name="base_model" class="form-select">
+                            {% for m in yolo_models %}
+                            <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Epochs</label>
+                        <input type="number" name="epochs" class="form-control" value="50" min="1" max="500">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Mulai Training</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Status Training</span>
+                <span id="statusBadge" class="badge bg-secondary">-</span>
+            </div>
+            <div class="card-body">
+                <div id="trainingLog" class="bg-dark text-light p-3 rounded small" style="max-height: 300px; overflow-y: auto; font-family: monospace;"></div>
+                <div id="modelList" class="mt-3">
+                    {% for m in models %}
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                        <span>{{ m.base_model }} - {{ m.status }}</span>
+                        {% if m.status == 'completed' and m.model_path %}
+                        <a href="{{ url_for('training.download_model', project_id=project.id, model_id=m.id) }}" class="btn btn-sm btn-success">Download best.pt</a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+<script>
+const projectId = {{ project.id }};
+let currentModelId = null;
+
+document.getElementById('trainForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const res = await fetch(`/projects/${projectId}/training/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            base_model: fd.get('base_model'),
+            epochs: parseInt(fd.get('epochs'))
+        })
+    });
+    const data = await res.json();
+    if (data.success) {
+        currentModelId = data.model_id;
+        document.getElementById('statusBadge').textContent = 'Pending';
+        document.getElementById('statusBadge').className = 'badge bg-warning';
+        pollStatus();
+    } else {
+        alert(data.error || 'Gagal memulai training');
+    }
+});
+
+function pollStatus() {
+    if (!currentModelId) return;
+    fetch(`/projects/${projectId}/training/${currentModelId}/status`)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('statusBadge').textContent = d.status;
+            document.getElementById('statusBadge').className = 'badge bg-' + 
+                (d.status === 'completed' ? 'success' : d.status === 'failed' ? 'danger' : d.status === 'training' ? 'primary' : 'warning');
+            if (d.status === 'completed' || d.status === 'failed') {
+                location.reload();
+            } else {
+                setTimeout(pollStatus, 2000);
+            }
+        });
+}
+</script>
+{% endblock %}

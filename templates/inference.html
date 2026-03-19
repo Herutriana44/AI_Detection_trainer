@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Inferensi - {{ project.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Inferensi</h2>
+    {% if models %}
+    <a href="{{ url_for('training.training_page', project_id=project.id) }}" class="btn btn-outline-secondary">Training</a>
+    {% endif %}
+</div>
+{% if not models %}
+<div class="alert alert-warning">Belum ada model yang selesai di-training. Silakan training model terlebih dahulu.</div>
+{% else %}
+<div class="row">
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">Pilih Model & Sumber</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Model</label>
+                    <select id="modelSelect" class="form-select">
+                        {% for m in models %}
+                        <option value="{{ m.id }}">{{ m.base_model }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <ul class="nav nav-tabs mb-2" role="tablist">
+                    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabImage">Gambar</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabVideo">Video</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabCamera">Kamera</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabUrl">URL/RTSP</a></li>
+                </ul>
+                <div class="tab-content">
+                    <div id="tabImage" class="tab-pane fade show active">
+                        <input type="file" id="imageInput" accept="image/*" class="form-control mb-2">
+                        <button id="detectImage" class="btn btn-primary">Deteksi</button>
+                    </div>
+                    <div id="tabVideo" class="tab-pane fade">
+                        <input type="file" id="videoInput" accept="video/*" class="form-control mb-2">
+                        <button id="detectVideo" class="btn btn-primary">Deteksi</button>
+                    </div>
+                    <div id="tabCamera" class="tab-pane fade">
+                        <video id="cameraPreview" width="100%" autoplay playsinline style="max-height: 200px;"></video>
+                        <button id="startCamera" class="btn btn-outline-primary btn-sm mt-2">Aktifkan Kamera</button>
+                        <button id="detectCamera" class="btn btn-primary mt-2">Ambil & Deteksi</button>
+                    </div>
+                    <div id="tabUrl" class="tab-pane fade">
+                        <input type="text" id="urlInput" class="form-control mb-2" placeholder="URL gambar/video atau rtsp://...">
+                        <button id="detectUrl" class="btn btn-primary">Deteksi</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">Hasil Deteksi</div>
+            <div class="card-body text-center">
+                <div id="resultArea"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+const projectId = {{ project.id }};
+let stream = null;
+
+async function runDetect(formData) {
+    const modelId = document.getElementById('modelSelect').value;
+    formData.append('model_id', modelId);
+    document.getElementById('resultArea').innerHTML = '<div class="spinner-border text-primary"></div><p class="mt-2">Memproses...</p>';
+    try {
+        const res = await fetch(`/projects/${projectId}/inference/detect`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        let html = '';
+        (data.images || []).forEach(b64 => {
+            html += `<img src="data:image/jpeg;base64,${b64}" class="img-fluid rounded mb-2" style="max-height: 500px;">`;
+        });
+        document.getElementById('resultArea').innerHTML = html || '<p class="text-muted">Tidak ada hasil</p>';
+    } catch (e) {
+        document.getElementById('resultArea').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+}
+
+document.getElementById('detectImage').addEventListener('click', () => {
+    const input = document.getElementById('imageInput');
+    if (!input.files.length) { alert('Pilih gambar'); return; }
+    const fd = new FormData();
+    fd.append('source_type', 'image');
+    fd.append('image', input.files[0]);
+    runDetect(fd);
+});
+
+document.getElementById('detectVideo').addEventListener('click', () => {
+    const input = document.getElementById('videoInput');
+    if (!input.files.length) { alert('Pilih video'); return; }
+    const fd = new FormData();
+    fd.append('source_type', 'video');
+    fd.append('video', input.files[0]);
+    runDetect(fd);
+});
+
+document.getElementById('startCamera').addEventListener('click', async () => {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        document.getElementById('cameraPreview').srcObject = stream;
+    } catch (e) { alert('Tidak dapat mengakses kamera: ' + e.message); }
+});
+
+document.getElementById('detectCamera').addEventListener('click', async () => {
+    const video = document.getElementById('cameraPreview');
+    if (!video.srcObject) { alert('Aktifkan kamera terlebih dahulu'); return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        const fd = new FormData();
+        fd.append('source_type', 'image');
+        fd.append('image', blob, 'capture.jpg');
+        runDetect(fd);
+    }, 'image/jpeg');
+});
+
+document.getElementById('detectUrl').addEventListener('click', () => {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { alert('Masukkan URL'); return; }
+    const fd = new FormData();
+    fd.append('source_type', 'url');
+    fd.append('url', url);
+    runDetect(fd);
+});
+</script>
+{% endif %}
+{% endblock %}
