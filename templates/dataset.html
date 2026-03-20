@@ -11,14 +11,59 @@
         <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary">Kembali</a>
     </div>
 </div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-upload me-1"></i>Upload Gambar</h6>
+                <form action="{{ url_for('upload.upload_files', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
+                    <div class="flex-grow-1">
+                        <input type="file" name="files" class="form-control" multiple accept="image/*">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-download me-1"></i>Export / Download Dataset</h6>
+                <p class="small text-muted mb-2">Unduh dataset dalam format siap pakai</p>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for fmt, info in export_formats.items() %}
+                    <a href="{{ url_for('upload.export_dataset', project_id=project.id, format_type=fmt) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-download me-1"></i>{{ info.name }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card mb-4">
     <div class="card-body">
-        <h6 class="card-title">Upload Dataset</h6>
-        <form action="{{ url_for('upload.upload_files', project_id=project.id) }}" method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
-            <div class="flex-grow-1">
-                <input type="file" name="files" class="form-control" multiple accept="image/*">
+        <h6 class="card-title"><i class="bi bi-box-arrow-in-down me-1"></i>Import Dataset</h6>
+        <p class="text-muted small mb-3">Import dataset dari berbagai format (mirip Roboflow)</p>
+        <form action="{{ url_for('upload.import_dataset', project_id=project.id) }}" method="post" enctype="multipart/form-data">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label">Format</label>
+                    <select name="format" class="form-select" id="importFormat">
+                        {% for fmt, info in import_formats.items() %}
+                        <option value="{{ fmt }}" data-ext="{{ info.ext }}">{{ info.name }} — {{ info.desc }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">File</label>
+                    <input type="file" name="file" class="form-control" id="importFile" accept=".zip,.json,.csv">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-down me-1"></i>Import</button>
+                </div>
             </div>
-            <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Upload</button>
         </form>
     </div>
 </div>
@@ -54,4 +99,13 @@
     </div>
     {% endfor %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('importFormat').addEventListener('change', function() {
+    const ext = this.options[this.selectedIndex].dataset.ext || '.zip,.json,.csv';
+    document.getElementById('importFile').setAttribute('accept', ext);
+});
+</script>
 {% endblock %}
