@@ -36,16 +36,25 @@
     </div>
     <div class="col-lg-7">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span>Status Training</span>
                 <span id="statusBadge" class="badge bg-secondary">-</span>
             </div>
             <div class="card-body">
-                <div id="trainingLog" class="bg-dark text-light p-3 rounded small" style="max-height: 300px; overflow-y: auto; font-family: monospace;"></div>
+                <div id="progressWrap" class="mb-3 d-none">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span id="progressLabel">Progres</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress" style="height: 1.25rem;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div id="trainingLog" class="bg-dark text-light p-3 rounded small" style="max-height: 280px; overflow-y: auto; font-family: monospace; white-space: pre-wrap;"></div>
                 <div id="modelList" class="mt-3">
                     {% for m in models %}
-                    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
-                        <span>{{ m.base_model }} - {{ m.status }}</span>
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-2" data-model-id="{{ m.id }}">
+                        <span class="model-status"><strong>{{ m.base_model }}</strong> — <span class="status-text">{{ m.status }}</span> <span class="progress-detail small text-muted"></span></span>
                         {% if m.status == 'completed' and m.model_path %}
                         <a href="{{ url_for('training.download_model', project_id=project.id, model_id=m.id) }}" class="btn btn-sm btn-success">Download best.pt</a>
                         {% endif %}
@@ -60,6 +69,39 @@
 <script>
 const projectId = {{ project.id }};
 let currentModelId = null;
+let pollTimer = null;
+let lastProgressMsg = '';
+
+function badgeClass(status) {
+    if (status === 'completed') return 'bg-success';
+    if (status === 'failed') return 'bg-danger';
+    if (status === 'training') return 'bg-primary';
+    if (status === 'preparing') return 'bg-info text-dark';
+    if (status === 'pending') return 'bg-warning text-dark';
+    return 'bg-secondary';
+}
+
+function appendLog(line) {
+    const el = document.getElementById('trainingLog');
+    if (!el) return;
+    const t = new Date().toISOString().slice(11, 19);
+    el.textContent += `[${t}] ${line}\n`;
+    el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+    const el = document.getElementById('trainingLog');
+    if (el) el.textContent = '';
+}
+
+function updateModelRow(modelId, status, detail) {
+    const row = document.querySelector(`#modelList [data-model-id="${modelId}"]`);
+    if (!row) return;
+    const st = row.querySelector('.status-text');
+    const det = row.querySelector('.progress-detail');
+    if (st) st.textContent = status;
+    if (det) det.textContent = detail ? ` — ${detail}` : '';
+}
 
 document.getElementById('trainForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -75,8 +117,12 @@ document.getElementById('trainForm')?.addEventListener('submit', async (e) => {
     const data = await res.json();
     if (data.success) {
         currentModelId = data.model_id;
-        document.getElementById('statusBadge').textContent = 'Pending';
-        document.getElementById('statusBadge').className = 'badge bg-warning';
+        clearLog();
+        document.getElementById('progressWrap').classList.remove('d-none');
+        document.getElementById('statusBadge').textContent = 'pending';
+        document.getElementById('statusBadge').className = 'badge ' + badgeClass('pending');
+        appendLog('Job training dimulai.');
+        updateModelRow(currentModelId, 'pending', '');
         pollStatus();
     } else {
         alert(data.error || 'Gagal memulai training');
@@ -88,14 +134,56 @@ function pollStatus() {
     fetch(`/projects/${projectId}/training/${currentModelId}/status`)
         .then(r => r.json())
         .then(d => {
-            document.getElementById('statusBadge').textContent = d.status;
-            document.getElementById('statusBadge').className = 'badge bg-' + 
-                (d.status === 'completed' ? 'success' : d.status === 'failed' ? 'danger' : d.status === 'training' ? 'primary' : 'warning');
+            const badge = document.getElementById('statusBadge');
+            const bar = document.getElementById('progressBar');
+            const pctEl = document.getElementById('progressPercent');
+            const wrap = document.getElementById('progressWrap');
+            const lbl = document.getElementById('progressLabel');
+
+            badge.textContent = d.status;
+            badge.className = 'badge ' + badgeClass(d.status);
+
+            if (d.status === 'preparing' || d.status === 'training' || d.status === 'pending') {
+                wrap.classList.remove('d-none');
+                const pct = typeof d.progress_percent === 'number' ? d.progress_percent : 0;
+                bar.style.width = pct + '%';
+                bar.classList.remove('bg-danger');
+                bar.classList.add('bg-primary');
+                const detail = d.progress_total
+                    ? ` (${d.progress_epoch || 0}/${d.progress_total} epoch)`
+                    : '';
+                pctEl.textContent = (d.progress_message || d.status) + detail;
+                lbl.textContent = d.progress_message || d.status;
+            }
+
+            updateModelRow(currentModelId, d.status, d.progress_message || '');
+
+            if (d.progress_message && d.progress_message !== lastProgressMsg) {
+                lastProgressMsg = d.progress_message;
+                appendLog(d.progress_message);
+            }
+
+            if (d.status === 'failed' && d.error) {
+                appendLog('ERROR: ' + d.error);
+                lastProgressMsg = '';
+            }
+
             if (d.status === 'completed' || d.status === 'failed') {
+                if (pollTimer) clearTimeout(pollTimer);
+                bar.style.width = '100%';
+                if (d.status === 'failed') {
+                    bar.classList.remove('bg-primary');
+                    bar.classList.add('bg-danger');
+                } else {
+                    bar.classList.remove('progress-bar-animated');
+                }
                 location.reload();
             } else {
-                setTimeout(pollStatus, 2000);
+                pollTimer = setTimeout(pollStatus, 1500);
             }
+        })
+        .catch(() => {
+            pollTimer = setTimeout(pollStatus, 3000);
         });
 }
 </script>

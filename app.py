@@ -26,8 +26,25 @@ app.register_blueprint(annotation.bp, url_prefix="/projects")
 app.register_blueprint(training.bp, url_prefix="/projects")
 app.register_blueprint(inference.bp, url_prefix="/projects")
 
+def _migrate_trained_model_columns():
+    """Tambah kolom progress pada DB lama (SQLite)."""
+    from sqlalchemy import text
+    cols = [
+        ("progress_epoch", "INTEGER"),
+        ("progress_total", "INTEGER"),
+        ("progress_message", "TEXT"),
+    ]
+    for col, ddl in cols:
+        try:
+            db.session.execute(text(f"ALTER TABLE trained_model ADD COLUMN {col} {ddl}"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 with app.app_context():
     db.create_all()
+    _migrate_trained_model_columns()
 
 log.info("Flask app initialized | Upload: %s | Projects: %s", app.config["UPLOAD_FOLDER"], app.config["PROJECTS_FOLDER"])
 

@@ -41,5 +41,9 @@ class TrainedModel(db.Model):
     base_model = db.Column(db.String(50), nullable=False)  # yolov8n, yolov8s, etc
     model_path = db.Column(db.String(500))
     epochs = db.Column(db.Integer)
-    status = db.Column(db.String(50), default="pending")  # pending, training, completed, failed
+    status = db.Column(db.String(50), default="pending")  # pending, preparing, training, completed, failed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Progress (diisi saat training berjalan)
+    progress_epoch = db.Column(db.Integer, default=0)
+    progress_total = db.Column(db.Integer)
+    progress_message = db.Column(db.Text)
