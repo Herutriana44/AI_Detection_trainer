@@ -11,7 +11,9 @@ log = setup_logger("app")
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+# eventlet + threading.Thread untuk training YOLO = training tidak pernah jalan (CPU 0%).
+# Gunakan threading agar job berat berjalan di OS thread nyata.
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Ensure data directory exists
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)

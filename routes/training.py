@@ -45,7 +45,9 @@ def _update_training_progress(app, model_id, project_id, **kwargs):
 
 def run_training(app, project_id, model_id):
     job_id = f"{project_id}_{model_id}"
-    log.info("Training dimulai | project_id=%s model_id=%s", project_id, model_id)
+    # Backup: pastikan terlihat di Colab/Kaggle meski buffering logging
+    print(f"[training] thread started pid={os.getpid()} model_id={model_id}", flush=True)
+    log.info("Training dimulai | project_id=%s model_id=%s pid=%s", project_id, model_id, os.getpid())
     with app.app_context():
         model_record = TrainedModel.query.get(model_id)
         if not model_record or model_record.project_id != project_id:
@@ -244,13 +246,16 @@ def start_training(project_id):
     db.session.commit()
     
     app_instance = current_app._get_current_object()
-    def run():
-        run_training(app_instance, project_id, model_record.id)
-    
-    thread = threading.Thread(target=run)
+    mid = model_record.id
+
+    def run_training_job():
+        run_training(app_instance, project_id, mid)
+
+    # Dengan async_mode=threading (bukan eventlet), OS thread ini benar-benar jalan paralel.
+    thread = threading.Thread(target=run_training_job, name="YoloTraining", daemon=False)
     thread.start()
-    training_jobs[f"{project_id}_{model_record.id}"] = thread
-    log.info("Training job dijalankan | project_id=%s model_id=%s base=%s epochs=%d", project_id, model_record.id, base_model, epochs)
+    training_jobs[f"{project_id}_{mid}"] = thread
+    log.info("Training job dijadwalkan | project_id=%s model_id=%s base=%s epochs=%d", project_id, mid, base_model, epochs)
     
     return jsonify({"model_id": model_record.id, "success": True})
 
